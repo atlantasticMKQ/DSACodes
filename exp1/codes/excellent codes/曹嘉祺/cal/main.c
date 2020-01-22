@@ -3,6 +3,8 @@
 #include<math.h>
 #include<string.h>
 #include<editline.h>
+#include<getopt.h>
+#include<unistd.h>
 
 #include"lib/tools.h"
 #include"lib/bool.h"
@@ -19,15 +21,21 @@
 #include"lib/gramCheck.h"
 #include"lib/plantTree.h"
 #define EXIT	100
-	
-		
 
+#define L(root) (root)->left
+#define R(root) (root)->right
+#define RL(root) (root)->right->left
+#define RRL(root) (root)->right->right->left
+#define RRRL(root) (root)->right->right->right->left
+
+char *programName="Q-lisp";		
+char *version="1.0.1";
 
 int mirrorSetup(tree *mirror,struct funcNode *f,tree *root)
 {
 	int err;
 	tree *newMirror;
-	for(newMirror=mirror->right;newMirror!=NULL;newMirror=newMirror->right)
+	for(newMirror=R(mirror);newMirror!=NULL;newMirror=R(newMirror))
 		{
 			if(newMirror->left->type==UNSET&&newMirror->left->state==EVAL)
 				mirrorSetup(newMirror->left,f,root);
@@ -40,7 +48,7 @@ int mirrorSetup(tree *mirror,struct funcNode *f,tree *root)
 									tree *node=root;
 									for(int i=0;i<a->index;node=node->right)
 										i++;
-									err=setTree(newMirror->left,node->left->elem,node->left->type,node->left->state);
+									err=setTree(newMirror->left,node->left->elem,node->left->type,L(node)->state);
 									IF_NOT_OK_RET(err);
 								}
 						}
@@ -2430,7 +2438,7 @@ int eval(tree *root,func *fhead,elem *ehead)
 			
 		}	
 	//not a basic func
-	func *f=findFunc(fhead,root->left->elem);
+	func *f=findFunc(fhead,L(root)->elem);
 	if(f==NULL)
 		return FUNCNAMEERR;
 	if(f->argNum!=argNum(root))
@@ -2444,45 +2452,60 @@ int eval(tree *root,func *fhead,elem *ehead)
 	IF_NOT_OK_RET(err);
 	return OK;
 }
+int execLine(char *line,func *fhead,elem *ehead)
+{
+	int err=OK;
+	if(strcmp(line,"")==0)
+		return err;
+	if((err=gramCheck(line))!=OK)
+		return err;
+	tree *root=treeInit();			
+	if((err=plantTree(root,line,ehead))!=OK)
+		return err;
+	
+	if((err=eval(root,fhead,ehead))==EXIT)
+		{
+			freeTree(root);
+			return err;
+		}
+	
+}
 int loadFile(char *path,func *fhead,elem *ehead)
 {
 	FILE *fp;
 	char line[STR_SIZE];
+	int err=OK;
+	
 	if((fp=fopen(path,"r"))==NULL)
-		{
-			return ERR;
-		}
+		return FILEERR;
 	while(!feof(fp))
 		{
-			char line[512];
-			fgets(line,512,fp);
+			if(fgets(line,STR_SIZE,fp)==NULL)
+				break;
 			printf("\e[1;33mline:%s\e[0m",line);
-			if(gramCheck(line)!=OK)
-				{
-					continue;
-				}
-			printf("");
-			tree *root=treeInit();			
-
-
-			if(plantTree(root,line,ehead)!=OK)
-				{
-					continue;
-				}
-
-			int err=eval(root,fhead,ehead);
-			//printf("\n\n%s\n\n",statToStr(err));
+			err=execLine(line,fhead,ehead);
 			if(err==EXIT)
-				return 0;
-			freeTree(root);
+				break;
 		}
-
-
 	fclose(fp);
 	return OK;
 }
-	
-int main()
+void printUsage(FILE *stream)
+{
+	fprintf(stream,"Usage: %s options\n",programName);
+	fprintf(stream,
+		" -h --help .\n"
+		" -v --version .\n"
+		" -i --interactive .\n"
+		);
+	return;
+}
+void printVersion(FILE *stream)
+{
+	fprintf(stream,"Version: %s .\n",version);
+	return;
+}
+void interactiveMode()
 {
 	func *fhead=funcInit();
 	elem *ehead=elemInit();
@@ -2493,28 +2516,42 @@ int main()
 			char *line=readline("mkq> ");
 			printf("\n");
 			add_history(line);
-			if(gramCheck(line)!=OK)
-				{
-					printf("\e[1;31mgramCheck not ok!\e[0m\n");
-					free(line);
-					continue;
-				}
-			
-			tree *root=treeInit();			
-
-
-			if(plantTree(root,line,ehead)!=OK)
-				{
-					printf("plant not OK\n");
-					free(line);
-					continue;
-				}
-
-			int err=eval(root,fhead,ehead);
-			printf("\n\n\e[1;31m%s\e[0m\n\n",statToStr(err));
-			if(err==EXIT)
-				return 0;
-			freeTree(root);
+			int err=execLine(line,fhead,ehead);
+			printf("\e[1;31m\n\n%s\n\n\e[0m",statToStr(err));
 			free(line);
+			if(err==EXIT)
+				exit(0);
+			else if(err!=OK)
+				continue;
 		}
+}
+int main(int argc,char **argv)
+{
+	const char *const stortOptions="hvi";
+	const struct option longOptions[]=
+		{
+			{"help",0,NULL,'h'},
+			{"version",0,NULL,'v'},
+			{"interactive",0,NULL,'i'},
+			{NULL,0,NULL,0}
+		};
+	int option=getopt_long(argc,argv,stortOptions,longOptions,NULL);
+	switch(option)
+		{
+		case 'h':
+			printUsage(stdout);
+			exit(0);
+			break;
+		case 'v':
+			printVersion(stdout);
+			exit(0);
+			break;
+		case 'i':
+			interactiveMode();
+			break;
+		default:
+			interactiveMode();
+		}
+				
+				
 }

@@ -18,7 +18,7 @@
 #define ELEMREDEF	13
 #define ELEMNOTFOUND	14
 #define ELEMTYPEERR	15
-
+#define FILEERR		16
 #define EXIT		100
 
 char *statToStr(int stat)
@@ -59,6 +59,8 @@ char *statToStr(int stat)
 			return "ELEMTYPEERR";
 		case EXIT:
 			return "EXIT";
+		case FILEERR:
+			return "FILEERR";
 		default:
 			return "UNKNOWN";
 		}
